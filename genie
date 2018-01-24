@@ -1,0 +1,198 @@
+<?php
+#!/usr/bin/php
+
+function throwError($msg, $showWrongCallMsg = false){
+    echo "************************************************\n";
+    if($showWrongCallMsg){
+        echo "genie not invoked properly\n";
+    }
+
+    echo $msg . "\n";
+
+    if($showWrongCallMsg){
+      echo "php genie --action parameter(s)\n";
+    }
+
+    echo "************************************************\n";
+    exit();
+}
+
+function connectToDatabase(){
+      $host = '127.0.0.1';
+      $dbUser = 'root';
+      $dbPwd = 'root';
+      $dsn = "mysql:host=" . $host . ";charset=utf8";
+
+      $connection = new PDO($dsn, $dbUser, $dbPwd);
+      $connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      $connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+
+      return $connection;
+}
+
+function checkTableExist($connection, $dbName, $tbl){
+
+  if($tbl == ''){
+    throwError('Empty Table name error');
+  }
+
+  #check if table name exist in the database
+  $query = "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = '" . trim($dbName) . "' AND table_name = '" . trim($tbl) . "'";
+  $st = $connection->prepare($query);
+  $st->execute();
+  $st->bindColumn('count', $count);
+  $st->fetch(PDO::FETCH_ASSOC);
+
+
+ return ($count == 0) ? false : true;
+
+}
+
+
+if($argc > 1){
+
+    $action = $argv[1];
+
+    # check if action is passed properly
+    if(strpos($action, '--') === false){
+
+        throwError("Action not passed", true);
+
+    }
+
+    if(!isset($argv[2])){
+
+        throwError("Parameter not passed");
+    }
+
+    switch(strtolower($action)){
+
+        case '--setup_database': case '--setup_db':
+
+          $file = $argv[2];
+
+          # check if file exist
+          if(!file_exists($file)){
+
+              throwError("genie could not locate " . $file . "\n make sure the file exist or check if the  file path is correct");
+
+          }
+
+          # read parsed file's content as an array
+          $fileContent = file($file);
+
+          /** try to create database */
+          $connection = connectToDatabase();
+
+          $currentTable = $databaseName = $query = $subQuery = '';
+          $primaryKeyField = null;
+
+          foreach($fileContent as $line){
+
+
+                  if(trim($line) != ''){
+
+                        # get database name
+                        if(strpos($line, '&&') !== false){
+
+                          $databaseName = substr($line, 2);
+
+                          # create and use database
+                          echo "\nCreating Database " . $databaseName . "\n";
+                          $connection->exec('CREATE DATABASE IF NOT EXISTS ' . $databaseName);
+                          $connection->exec('USE ' . $databaseName);
+
+
+                        # get table name
+                        }elseif(strpos($line, '**') !== false){
+
+                          # execute query if query string is not empty
+                          if($query != ''){
+
+                              $query .= 'PRIMARY KEY (' . $primaryKeyField . '))';
+                              # create table
+                              echo "Creating Table " . $currentTable . "\n";
+
+
+                              if(checkTableExist($connection, $databaseName, $currentTable)){
+
+                                echo "table $currentTable already exist\n\n";
+
+                              }else{
+
+                                  $connection->exec($query);
+
+                              }
+
+                              # reset query string and primary key field
+                              $query = $subQuery = ''; $primaryKeyField = null;
+
+                          }
+
+                          # reset current table
+                          $currentTable = substr($line, 2);
+
+                          //echo "creating table " . $currentTable . "\n";
+
+                          # start building query
+                          $query = 'CREATE TABLE ' . $currentTable . '( ';
+                          $subQuery = '';
+
+
+                        }elseif(strpos($line, '->') !== false){
+
+                          $pieces = explode(',', $line);
+                          # get field
+                          $field = substr($pieces[0], 2);
+
+
+                          # check if pk exist in line
+                          if(strpos($line, 'pk') !== false && is_null($primaryKeyField)){
+                            $primaryKeyField = $field;
+
+
+                            # replace all occurances of pk and pk, in line
+                            $line = str_replace('pk', '', $line);
+                            $line = str_replace('pk,', '', $line);
+                          }
+
+                          $line = str_replace(', ', ',', $line);
+
+                          $subQuery = substr(str_replace(',', ' ', $line), 2) . ', ';
+
+                          $query .= $subQuery;
+
+
+                        }
+
+                      }
+
+          }
+
+          //echo $query;
+          echo "operation completed.\n";
+
+
+
+
+    break;
+
+
+    default:
+        echo "************************************************\n";
+        echo "action " . $action . " is not supported by genie\n";
+        echo "************************************************\n";
+        exit();
+        break;
+
+  }
+
+
+}else{
+
+    echo "************************************************\n";
+    echo "Call genie to perform some magic for you...\n";
+    echo "php genie --action parameter(s)\n";
+    echo "************************************************\n";
+    exit();
+}

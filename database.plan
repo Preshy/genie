@@ -1,0 +1,14 @@
+&&TestDatabaseName
+
+**test_table1
+->id,int(11),not null,auto_increment,pk
+->name,varchar(250),not null
+
+**test_table2
+->id,int(11),not null,pk
+->networkId,int(11),not null
+->value,varchar(40),not null
+->amount,int(6) unsigned,not null
+
+
+************************
